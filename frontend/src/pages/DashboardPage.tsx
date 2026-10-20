@@ -1,0 +1,434 @@
+import React, { useState } from 'react';
+import { 
+  Filter, 
+  Search, 
+  AlertCircle, 
+  CheckCircle2, 
+  Clock, 
+  UserCheck, 
+  CopyCheck, 
+  Layers, 
+  RefreshCw,
+  ExternalLink,
+  ChevronRight,
+  ShieldCheck,
+  Check,
+  X,
+  GitMerge
+} from 'lucide-react';
+import { CaseRecord, CaseStatus } from '../types';
+import { apiService } from '../services/api';
+
+interface DashboardPageProps {
+  cases: CaseRecord[];
+  onRefresh: () => void;
+  onSelectCase: (caseRecord: CaseRecord) => void;
+}
+
+export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, onSelectCase }) => {
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const [selectedCaseForReview, setSelectedCaseForReview] = useState<CaseRecord | null>(null);
+  const [reviewDecision, setReviewDecision] = useState<'approve' | 'merge_duplicate' | 'reject'>('approve');
+  const [reviewerNotes, setReviewerNotes] = useState('Reviewed by Campus Facility Supervisor');
+  const [targetTeam, setTargetTeam] = useState('Campus Plumbing & Water Infrastructure Team');
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  const filteredCases = cases.filter(c => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+    if (categoryFilter !== 'all' && c.extraction.issue_type !== categoryFilter) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchText = c.raw_complaint.toLowerCase();
+      const matchNum = c.case_number.toLowerCase();
+      const matchSummary = c.extraction.clean_summary.toLowerCase();
+      const matchLoc = c.extraction.building_block.toLowerCase();
+      return matchText.includes(q) || matchNum.includes(q) || matchSummary.includes(q) || matchLoc.includes(q);
+    }
+    return true;
+  });
+
+  const handleDecisionSubmit = async () => {
+    if (!selectedCaseForReview) return;
+    setReviewLoading(true);
+    try {
+      await apiService.makeCaseDecision(selectedCaseForReview.id, {
+        decision: reviewDecision,
+        reviewer_notes: reviewerNotes,
+        target_team: reviewDecision === 'approve' ? targetTeam : undefined,
+        parent_case_id: reviewDecision === 'merge_duplicate' && selectedCaseForReview.duplicate_candidates?.[0]?.matched_case_id
+          ? selectedCaseForReview.duplicate_candidates[0].matched_case_id
+          : undefined
+      });
+      setSelectedCaseForReview(null);
+      onRefresh();
+    } catch (err) {
+      console.error("Decision error:", err);
+      alert("Failed to save decision.");
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const getStatusBadge = (status: CaseStatus, isHeld: boolean) => {
+    if (isHeld || status === 'held_for_review') {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+          <CopyCheck className="w-3 h-3 text-amber-700" />
+          <span>Held for Review</span>
+        </span>
+      );
+    }
+    switch (status) {
+      case 'assigned':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-900 border border-blue-200">
+            <UserCheck className="w-3 h-3 text-blue-700" />
+            <span>Assigned</span>
+          </span>
+        );
+      case 'in_progress':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-900 border border-indigo-200">
+            <Clock className="w-3 h-3 text-indigo-700" />
+            <span>In Progress</span>
+          </span>
+        );
+      case 'resolved':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-900 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+            <span>Resolved</span>
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+            <X className="w-3 h-3 text-slate-500" />
+            <span>Rejected</span>
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">
+            {status}
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="space-y-6 py-6 max-w-7xl mx-auto">
+      {/* Page Title & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">Admin Maintenance Triage</h1>
+          <p className="text-sm text-slate-500">Live ticket queue, duplicate validation, and audit timeline</p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={onRefresh}
+            className="p-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 flex items-center space-x-1.5 text-xs font-medium transition-all"
+            title="Refresh cases from server"
+          >
+            <RefreshCw className="w-4 h-4 text-slate-500" />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full md:w-96">
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search complaint, room, or ticket..."
+            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:border-red-600 outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-700 outline-none"
+          >
+            <option value="all">All Statuses</option>
+            <option value="held_for_review">Held for Review</option>
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-700 outline-none"
+          >
+            <option value="all">All Categories</option>
+            <option value="water_leak">Water Leak</option>
+            <option value="electrical">Electrical</option>
+            <option value="furniture">Furniture</option>
+            <option value="hvac">HVAC</option>
+            <option value="internet_it">Internet & IT</option>
+            <option value="cleanliness">Cleanliness</option>
+            <option value="security">Security</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Case List Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs sm:text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th className="px-4 py-3.5">Ticket #</th>
+                <th className="px-4 py-3.5">Raw Complaint</th>
+                <th className="px-4 py-3.5">Extracted Details</th>
+                <th className="px-4 py-3.5">Status & Routing</th>
+                <th className="px-4 py-3.5">Duplicate Evidence</th>
+                <th className="px-4 py-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredCases.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-slate-400">
+                    No tickets found matching the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredCases.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="font-bold text-slate-900">{c.case_number}</div>
+                      <div className="text-[11px] text-slate-400">
+                        {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-4 max-w-xs">
+                      <p className="text-slate-800 font-medium line-clamp-2">{c.raw_complaint}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">By {c.student_name}</p>
+                    </td>
+
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="font-semibold text-slate-900 capitalize">
+                        {c.extraction.issue_type.replace('_', ' ')}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {c.extraction.building_block} • {c.extraction.floor_or_room || 'General'}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Priority: {c.extraction.estimated_priority_score}/10 ({c.extraction.detected_urgency})
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="mb-1">{getStatusBadge(c.status, c.is_held_as_duplicate)}</div>
+                      <div className="text-[11px] text-slate-500 font-medium truncate max-w-[180px]">
+                        {c.assigned_team || 'Pending assignment'}
+                      </div>
+                      {c.n8n_dispatch && (
+                        <div className="text-[10px] font-mono text-slate-400">
+                          n8n: {c.n8n_dispatch.workflow_branch}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {c.duplicate_candidates && c.duplicate_candidates.length > 0 ? (
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            <span>Score: {(c.duplicate_candidates[0].overall_hybrid_score * 100).toFixed(0)}%</span>
+                          </span>
+                          <p className="text-[10px] text-slate-500 max-w-[160px] truncate">
+                            Matches {c.duplicate_candidates[0].matched_case_title}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">Unique</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end space-x-2">
+                        {c.status === 'held_for_review' && (
+                          <button
+                            onClick={() => setSelectedCaseForReview(c)}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-sm transition-all"
+                          >
+                            Review
+                          </button>
+                        )}
+                        <button
+                          onClick={() => onSelectCase(c)}
+                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition-all"
+                          title="View Audit Trail & Evidence"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Human-in-the-Loop Decision Modal */}
+      {selectedCaseForReview && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl p-6 space-y-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-700">
+                  Human-in-the-Loop Approval Required
+                </span>
+                <h3 className="text-xl font-bold text-slate-900 mt-1">
+                  Review Case {selectedCaseForReview.case_number}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setSelectedCaseForReview(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+              <div className="font-semibold text-slate-700">Complaint Text:</div>
+              <p className="text-slate-900 italic">"{selectedCaseForReview.raw_complaint}"</p>
+              <div className="pt-2 text-[11px] text-slate-500">
+                Location: {selectedCaseForReview.extraction.building_block} ({selectedCaseForReview.extraction.specific_location_hint})
+              </div>
+            </div>
+
+            {selectedCaseForReview.duplicate_candidates && selectedCaseForReview.duplicate_candidates.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-1.5">
+                <div className="font-bold text-amber-900 flex items-center space-x-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-700" />
+                  <span>Suspected Duplicate of Case #{selectedCaseForReview.duplicate_candidates[0].matched_case_id}</span>
+                </div>
+                <p className="text-slate-700">
+                  Target Title: {selectedCaseForReview.duplicate_candidates[0].matched_case_title}
+                </p>
+                <div className="font-mono text-[11px] text-amber-800">
+                  Hybrid Score: {(selectedCaseForReview.duplicate_candidates[0].overall_hybrid_score * 100).toFixed(1)}% | 
+                  Semantic: {(selectedCaseForReview.duplicate_candidates[0].semantic_similarity * 100).toFixed(1)}% | 
+                  Location: {(selectedCaseForReview.duplicate_candidates[0].location_match_score * 100).toFixed(1)}%
+                </div>
+              </div>
+            )}
+
+            {/* Decision choices */}
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                Select Administrative Action
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setReviewDecision('approve')}
+                  className={`p-3 rounded-xl border text-center transition-all ${
+                    reviewDecision === 'approve'
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-bold'
+                      : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Check className="w-4 h-4 mx-auto mb-1 text-emerald-600" />
+                  <span className="text-xs">Approve & Dispatch</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReviewDecision('merge_duplicate')}
+                  className={`p-3 rounded-xl border text-center transition-all ${
+                    reviewDecision === 'merge_duplicate'
+                      ? 'border-amber-600 bg-amber-50 text-amber-900 font-bold'
+                      : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <GitMerge className="w-4 h-4 mx-auto mb-1 text-amber-600" />
+                  <span className="text-xs">Merge Duplicate</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReviewDecision('reject')}
+                  className={`p-3 rounded-xl border text-center transition-all ${
+                    reviewDecision === 'reject'
+                      ? 'border-red-600 bg-red-50 text-red-900 font-bold'
+                      : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <X className="w-4 h-4 mx-auto mb-1 text-red-600" />
+                  <span className="text-xs">Reject Case</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Target Team dropdown if approving */}
+            {reviewDecision === 'approve' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">Assign Maintenance Team</label>
+                <select
+                  value={targetTeam}
+                  onChange={(e) => setTargetTeam(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800"
+                >
+                  <option value="Campus Plumbing & Water Infrastructure Team">Campus Plumbing & Water Infrastructure Team</option>
+                  <option value="High & Low Voltage Electrical Operations">High & Low Voltage Electrical Operations</option>
+                  <option value="Carpentry & Facilities Maintenance Unit">Carpentry & Facilities Maintenance Unit</option>
+                  <option value="HVAC & Thermal Systems Engineering">HVAC & Thermal Systems Engineering</option>
+                  <option value="Campus IT & Network Operations Center (NOC)">Campus IT & Network Operations Center (NOC)</option>
+                  <option value="Sanitation & Groundskeeping Services">Sanitation & Groundskeeping Services</option>
+                </select>
+              </div>
+            )}
+
+            {/* Reviewer Note */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">Audit Trail Reason / Notes</label>
+              <input
+                type="text"
+                value={reviewerNotes}
+                onChange={(e) => setReviewerNotes(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedCaseForReview(null)}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDecisionSubmit}
+                disabled={reviewLoading}
+                className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-md"
+              >
+                {reviewLoading ? "Saving..." : "Confirm & Write Audit Log"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
