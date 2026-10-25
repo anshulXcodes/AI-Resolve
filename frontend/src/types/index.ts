@@ -40,6 +40,35 @@ export interface DuplicateEvidence {
   overall_hybrid_score: number;
   is_duplicate_candidate: boolean;
   reason: string;
+  visual_similarity?: number | null;
+}
+
+export interface VisualAnalysis {
+  brightness: number;
+  contrast: number;
+  sharpness: number;
+  resolution: string;
+  aspect_ratio: number;
+  is_blurry: boolean;
+  is_dark: boolean;
+  is_overexposed?: boolean;
+}
+
+export interface ProblemImage {
+  id: string;
+  public_id: string;
+  secure_url: string;
+  thumbnail_url: string;
+  original_filename: string;
+  content_type: string;
+  byte_size: number;
+  width: number;
+  height: number;
+  perceptual_hash: string;
+  blur_variance: number;
+  quality_warning?: string | null;
+  uploaded_at: string;
+  visual_analysis?: VisualAnalysis | null;
 }
 
 export interface DispatchEvent {
@@ -65,6 +94,15 @@ export interface CaseRecord {
   duplicate_candidates: DuplicateEvidence[];
   is_held_as_duplicate: boolean;
   parent_case_id?: string | null;
+  suspected_parent_case_id?: string | null;
+  review_status?: 'not_required' | 'pending_human_review' | 'confirmed_duplicate' | 'rejected_duplicate';
+  images: ProblemImage[];
+  affected_people?: number | null;
+  corroborating_report_count: number;
+  priority_score: number;
+  priority_level: UrgencyLevel;
+  priority_reasons: string[];
+  last_updated_at?: string | null;
   status: CaseStatus;
   assigned_team?: string | null;
   history: Array<{ timestamp: string; event: string }>;
@@ -78,6 +116,7 @@ export interface ComplaintCreate {
   student_email?: string;
   reported_block?: string;
   reported_floor?: string;
+  affected_people?: number;
 }
 
 export interface CaseDecisionRequest {
@@ -109,6 +148,43 @@ export interface DashboardStats {
   in_progress_or_assigned: number;
   resolved: number;
   duplicates_detected: number;
+  critical_priority_cases?: number;
   n8n_webhook_health: string;
   gemma_extraction_health: string;
+  cloudinary_configured?: boolean;
+  notion_configured?: boolean;
+}
+
+export interface UserSession {
+  username: string;
+  role: 'admin' | 'tester';
+  display_name: string;
+}
+
+export interface AuthStatusResponse {
+  authenticated: boolean;
+  user?: UserSession | null;
+  demo_mode: boolean;
+}
+
+export interface LoginResponse {
+  user: UserSession;
+  demo_mode: boolean;
+  message: string;
+  token?: string;
+}
+
+export interface NotionStatusResponse {
+  configured: boolean;
+  parent_page_id?: string | null;
+  database_id?: string | null;
+  documentation_page_id?: string | null;
+  last_synced_at?: string | null;
+}
+
+export interface NotionSyncResult {
+  status: string;
+  page_id?: string | null;
+  message: string;
+  synced_at: string;
 }

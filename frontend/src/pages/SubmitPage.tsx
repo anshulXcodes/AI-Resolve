@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   Send, 
   Sparkles, 
@@ -9,8 +9,10 @@ import {
   CheckCircle, 
   CopyCheck, 
   Loader2,
-  HelpCircle,
-  ArrowRight
+  ImagePlus,
+  Trash2,
+  UploadCloud,
+  Users
 } from 'lucide-react';
 import { ComplaintCreate, CaseRecord } from '../types';
 import { apiService } from '../services/api';
@@ -18,18 +20,58 @@ import { apiService } from '../services/api';
 interface SubmitPageProps {
   onCaseCreated: (createdCase: CaseRecord) => void;
   initialText?: string;
+  onTrackTicket?: (ticketId: string) => void;
 }
 
-export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialText = '' }) => {
+interface SelectedImage {
+  file: File;
+  previewUrl: string;
+}
+
+export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialText = '', onTrackTicket }) => {
   const [complaintText, setComplaintText] = useState(initialText);
   const [studentName, setStudentName] = useState('Ananya Sen');
   const [studentEmail, setStudentEmail] = useState('ananya.s@campus.edu');
   const [reportedBlock, setReportedBlock] = useState('Block B');
   const [reportedFloor, setReportedFloor] = useState('2nd Floor');
+  const [affectedPeople, setAffectedPeople] = useState('');
+  const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSubmittedCase, setLastSubmittedCase] = useState<CaseRecord | null>(null);
+
+  const addImages = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    const invalid = files.find((file) => {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      return !allowedExtensions.includes(extension || '') || file.size > 8 * 1024 * 1024;
+    });
+    if (invalid) {
+      setError(`${invalid.name} is not supported. Use a JPG, PNG, or WEBP image up to 8 MB.`);
+      return;
+    }
+    if (selectedImages.length + files.length > 4) {
+      setError('You can attach up to four images to one report.');
+      return;
+    }
+    setError(null);
+    setSelectedImages((current) => [
+      ...current,
+      ...files.map((file) => ({ file, previewUrl: URL.createObjectURL(file) })),
+    ]);
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages((current) => {
+      URL.revokeObjectURL(current[index].previewUrl);
+      return current.filter((_, currentIndex) => currentIndex !== index);
+    });
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
 
   const sampleComplaints = [
     {
@@ -74,12 +116,20 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
         student_name: studentName,
         student_email: studentEmail,
         reported_block: reportedBlock,
-        reported_floor: reportedFloor
+        reported_floor: reportedFloor,
+        affected_people: affectedPeople ? Number(affectedPeople) : undefined,
       };
 
-      const result = await apiService.submitComplaint(payload);
+      const result = await apiService.submitComplaint(
+        payload,
+        selectedImages.map((image) => image.file),
+        setUploadProgress,
+      );
       setLastSubmittedCase(result);
       onCaseCreated(result);
+      selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      setSelectedImages([]);
+      setUploadProgress(0);
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Failed to process complaint. Please check backend connection.");
     } finally {
@@ -91,6 +141,11 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
     setComplaintText(sample.text);
     setReportedBlock(sample.block);
     setReportedFloor(sample.floor);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    addImages(event.dataTransfer.files);
   };
 
   return (
@@ -204,6 +259,70 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
               </select>
             </div>
 
+           {/* Image evidence */}
+           <div className="space-y-2">
+             <div className="flex items-center justify-between gap-3">
+               <label className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                 <ImagePlus className="w-4 h-4 text-red-700" />
+                 Photo evidence <span className="font-normal text-slate-500 text-xs">(optional)</span>
+               </label>
+               <span className="text-[11px] text-slate-500">JPG, PNG, WEBP · up to 8 MB each</span>
+             </div>
+             <input
+               ref={imageInputRef}
+               type="file"
+               accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+               multiple
+               className="hidden"
+               onChange={(event) => event.target.files && addImages(event.target.files)}
+             />
+             <div
+               role="button"
+               tabIndex={0}
+               onClick={() => imageInputRef.current?.click()}
+               onKeyDown={(event) => event.key === 'Enter' && imageInputRef.current?.click()}
+               onDragOver={(event) => event.preventDefault()}
+               onDrop={handleDrop}
+               className="cursor-pointer rounded-xl border-2 border-dashed border-slate-300 hover:border-red-400 bg-slate-50 hover:bg-red-50/40 px-5 py-6 text-center transition-colors"
+             >
+               <UploadCloud className="w-6 h-6 text-slate-400 mx-auto mb-2" />
+               <p className="text-sm font-semibold text-slate-700">Drag photos here or choose files</p>
+               <p className="text-xs text-slate-500 mt-1">OpenCV checks image integrity and quality before secure storage.</p>
+             </div>
+             {selectedImages.length > 0 && (
+               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                 {selectedImages.map((image, index) => (
+                   <div key={`${image.file.name}-${index}`} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+                     <img src={image.previewUrl} alt={`Selected evidence ${index + 1}`} className="h-24 w-full object-cover" />
+                     <div className="p-2 pr-8 text-[10px] text-slate-600 truncate" title={image.file.name}>{image.file.name}</div>
+                     <button
+                       type="button"
+                       onClick={(event) => { event.stopPropagation(); removeImage(index); }}
+                       className="absolute right-1.5 top-1.5 rounded-full bg-slate-900/80 p-1 text-white hover:bg-red-700"
+                       aria-label={`Remove ${image.file.name}`}
+                     >
+                       <Trash2 className="w-3 h-3" />
+                     </button>
+                   </div>
+                 ))}
+               </div>
+             )}
+           </div>
+
+           <div className="space-y-1.5 max-w-xs">
+             <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+               <Users className="w-3.5 h-3.5 text-slate-400" /> Estimated people affected <span className="font-normal text-slate-400">(optional)</span>
+             </label>
+             <input
+               type="number"
+               min="0"
+               value={affectedPeople}
+               onChange={(event) => setAffectedPeople(event.target.value)}
+               placeholder="e.g. 50"
+               className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:border-red-600 outline-none"
+             />
+           </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700">Floor / Room Hint</label>
               <input
@@ -231,7 +350,7 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Running Gemma Extraction & Hybrid Duplicate Engine...</span>
+                <span>{selectedImages.length ? `Uploading evidence ${uploadProgress}% & analysing issue...` : 'Running Gemma Extraction & Hybrid Duplicate Engine...'}</span>
               </>
             ) : (
               <>
@@ -257,7 +376,7 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
               </div>
             </div>
 
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               {lastSubmittedCase.is_held_as_duplicate ? (
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
                   <CopyCheck className="w-3.5 h-3.5 text-amber-700" />
@@ -268,6 +387,16 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
                   <span>Assigned: {lastSubmittedCase.assigned_team}</span>
                 </span>
+              )}
+              {onTrackTicket && (
+                <button
+                  type="button"
+                  onClick={() => onTrackTicket(lastSubmittedCase.case_number)}
+                  className="px-3 py-1 rounded-full text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-sm flex items-center space-x-1"
+                >
+                  <span>Track Ticket</span>
+                  <span>→</span>
+                </button>
               )}
             </div>
           </div>
@@ -297,10 +426,10 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
               <div className="text-slate-500 font-medium">Priority & Urgency</div>
               <div className="text-sm font-bold text-slate-900 uppercase mt-0.5">
-                {lastSubmittedCase.extraction.detected_urgency} ({lastSubmittedCase.extraction.estimated_priority_score}/10)
+                {lastSubmittedCase.priority_level} ({lastSubmittedCase.priority_score}/10)
               </div>
               <div className="text-[11px] text-slate-500 mt-1">
-                n8n Branch: {lastSubmittedCase.n8n_dispatch?.workflow_branch}
+                {lastSubmittedCase.corroborating_report_count} corroborating report{lastSubmittedCase.corroborating_report_count === 1 ? '' : 's'} · n8n: {lastSubmittedCase.n8n_dispatch?.workflow_branch}
               </div>
             </div>
           </div>
@@ -317,6 +446,9 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
                   <div>
                     <span className="font-semibold text-slate-900">Matches Case #{cand.matched_case_id}:</span> {cand.matched_case_title}
                     <p className="text-[11px] text-slate-500 mt-0.5">{cand.reason}</p>
+                    {cand.visual_similarity !== null && cand.visual_similarity !== undefined && (
+                      <p className="text-[11px] text-slate-500">Visual similarity: {(cand.visual_similarity * 100).toFixed(0)}%</p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <span className="px-2 py-0.5 rounded font-mono font-bold bg-amber-100 text-amber-800 text-xs">
@@ -325,6 +457,42 @@ export const SubmitPage: React.FC<SubmitPageProps> = ({ onCaseCreated, initialTe
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {lastSubmittedCase.images.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-700">OpenCV-Validated Evidence (Cloudinary Stored)</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {lastSubmittedCase.images.map((image) => (
+                  <div key={image.id} className="rounded-xl overflow-hidden border border-slate-200 bg-white">
+                    <a href={image.secure_url} target="_blank" rel="noreferrer" className="block relative group">
+                      <img src={image.thumbnail_url} alt={image.original_filename} className="h-28 w-full object-cover group-hover:opacity-90 transition-opacity" />
+                      <div className="absolute top-1.5 right-1.5 bg-slate-900/80 text-[10px] text-white px-1.5 py-0.5 rounded font-mono">
+                        {image.width}×{image.height}
+                      </div>
+                    </a>
+                    <div className="p-2.5 space-y-1">
+                      <div className="text-[11px] font-semibold text-slate-800 truncate" title={image.original_filename}>
+                        {image.original_filename}
+                      </div>
+                      {image.visual_analysis && (
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          Sharpness: {image.visual_analysis.sharpness} · Brightness: {image.visual_analysis.brightness}
+                        </div>
+                      )}
+                      {image.quality_warning ? (
+                        <div className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          {image.quality_warning}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          ✓ OpenCV Integrity Verified
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

@@ -1,17 +1,13 @@
 import React, { useState } from 'react';
 import { 
-  Filter, 
   Search, 
   AlertCircle, 
   CheckCircle2, 
   Clock, 
   UserCheck, 
   CopyCheck, 
-  Layers, 
   RefreshCw,
-  ExternalLink,
   ChevronRight,
-  ShieldCheck,
   Check,
   X,
   GitMerge
@@ -28,6 +24,9 @@ interface DashboardPageProps {
 export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, onSelectCase }) => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('');
+  const [sortMode, setSortMode] = useState<'priority' | 'most_reported' | 'recent'>('priority');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [selectedCaseForReview, setSelectedCaseForReview] = useState<CaseRecord | null>(null);
@@ -39,6 +38,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
   const filteredCases = cases.filter(c => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false;
     if (categoryFilter !== 'all' && c.extraction.issue_type !== categoryFilter) return false;
+    if (priorityFilter !== 'all' && c.priority_level !== priorityFilter) return false;
+    if (locationFilter && !`${c.extraction.building_block} ${c.extraction.floor_or_room || ''}`.toLowerCase().includes(locationFilter.toLowerCase())) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchText = c.raw_complaint.toLowerCase();
@@ -48,7 +49,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
       return matchText.includes(q) || matchNum.includes(q) || matchSummary.includes(q) || matchLoc.includes(q);
     }
     return true;
+  }).sort((first, second) => {
+    if (sortMode === 'most_reported') return second.corroborating_report_count - first.corroborating_report_count || second.priority_score - first.priority_score;
+    if (sortMode === 'recent') return new Date(second.created_at).getTime() - new Date(first.created_at).getTime();
+    return second.priority_score - first.priority_score || second.corroborating_report_count - first.corroborating_report_count;
   });
+
+  const priorityClass = (level: string) => ({
+    critical: 'bg-red-100 text-red-800 border-red-200',
+    high: 'bg-orange-100 text-orange-800 border-orange-200',
+    medium: 'bg-amber-100 text-amber-800 border-amber-200',
+    low: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  }[level] || 'bg-slate-100 text-slate-700 border-slate-200');
 
   const handleDecisionSubmit = async () => {
     if (!selectedCaseForReview) return;
@@ -125,7 +137,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">Admin Maintenance Triage</h1>
-          <p className="text-sm text-slate-500">Live ticket queue, duplicate validation, and audit timeline</p>
+          <p className="text-sm text-slate-500">Authoritative priority queue, image evidence, duplicate validation, and audit timeline</p>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -149,6 +161,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search complaint, room, or ticket..."
             className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:border-red-600 outline-none"
+          />
+        </div>
+
+        <div className="relative w-full md:w-52">
+          <input
+            type="text"
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            placeholder="Filter location..."
+            className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:border-red-600 outline-none"
           />
         </div>
 
@@ -180,6 +202,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
             <option value="cleanliness">Cleanliness</option>
             <option value="security">Security</option>
           </select>
+
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-700 outline-none"
+          >
+            <option value="all">All Priorities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
+            className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-700 outline-none"
+          >
+            <option value="priority">Highest priority</option>
+            <option value="most_reported">Most reported</option>
+            <option value="recent">Most recent</option>
+          </select>
         </div>
       </div>
 
@@ -190,7 +234,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="px-4 py-3.5">Ticket #</th>
-                <th className="px-4 py-3.5">Raw Complaint</th>
+                <th className="px-4 py-3.5">Report & Evidence</th>
                 <th className="px-4 py-3.5">Extracted Details</th>
                 <th className="px-4 py-3.5">Status & Routing</th>
                 <th className="px-4 py-3.5">Duplicate Evidence</th>
@@ -215,8 +259,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
                     </td>
 
                     <td className="px-4 py-4 max-w-xs">
-                      <p className="text-slate-800 font-medium line-clamp-2">{c.raw_complaint}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">By {c.student_name}</p>
+                      <div className="flex gap-2.5">
+                        {c.images[0] && <img src={c.images[0].thumbnail_url} alt="Issue evidence" className="h-10 w-12 rounded-lg object-cover border border-slate-200 shrink-0" />}
+                        <div className="min-w-0">
+                          <p className="text-slate-800 font-medium line-clamp-2">{c.raw_complaint}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">By {c.student_name} · {c.images.length} image{c.images.length === 1 ? '' : 's'}</p>
+                        </div>
+                      </div>
                     </td>
 
                     <td className="px-4 py-4 whitespace-nowrap">
@@ -226,8 +275,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
                       <div className="text-[11px] text-slate-500">
                         {c.extraction.building_block} • {c.extraction.floor_or_room || 'General'}
                       </div>
-                      <div className="text-[10px] text-slate-400">
-                        Priority: {c.extraction.estimated_priority_score}/10 ({c.extraction.detected_urgency})
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className={`inline-flex border px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${priorityClass(c.priority_level)}`}>
+                          {c.priority_level} {c.priority_score}/10
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {c.corroborating_report_count} report{c.corroborating_report_count === 1 ? '' : 's'}
+                        </span>
                       </div>
                     </td>
 
@@ -252,6 +306,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ cases, onRefresh, 
                           <p className="text-[10px] text-slate-500 max-w-[160px] truncate">
                             Matches {c.duplicate_candidates[0].matched_case_title}
                           </p>
+                           {c.duplicate_candidates[0].visual_similarity !== null && c.duplicate_candidates[0].visual_similarity !== undefined && (
+                             <p className="text-[10px] text-slate-500">Visual: {(c.duplicate_candidates[0].visual_similarity * 100).toFixed(0)}%</p>
+                           )}
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400 italic">Unique</span>

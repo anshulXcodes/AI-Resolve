@@ -3,8 +3,9 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from app.models.schemas import CaseRecord, DuplicateEvidence, GemmaExtractionResult
+from app.models.schemas import CaseRecord, DuplicateEvidence, GemmaExtractionResult, ProblemImage
 from app.core.config import settings
+from app.services.image_processing_service import ImageProcessingService
 
 class DuplicateDetectionService:
     """
@@ -24,7 +25,8 @@ class DuplicateDetectionService:
         cls, 
         new_text: str, 
         new_extraction: GemmaExtractionResult,
-        existing_cases: List[CaseRecord]
+        existing_cases: List[CaseRecord],
+        new_images: Optional[List[ProblemImage]] = None,
     ) -> Tuple[List[DuplicateEvidence], bool]:
         
         candidates: List[DuplicateEvidence] = []
@@ -72,11 +74,32 @@ class DuplicateDetectionService:
                 time_score = max(0.2, math.exp(-hours_diff / 48.0))
             except Exception:
                 time_score = 0.8
-                
-            # Hybrid Formula: 50% Semantic + 35% Location + 15% Time Proximity
-            hybrid_score = (0.50 * semantic_score) + (0.35 * location_score) + (0.15 * time_score)
-            
-            is_match = hybrid_score >= settings.HYBRID_DUPLICATE_THRESHOLD
+
+            # OpenCV dHash is one additional signal, never a standalone merge
+            # decision. Different viewpoints of one issue may not match and an
+            # identical-looking image at another location can still be unrelated.
+            visual_score = cls._visual_similarity(new_images or [], existing.images)
+            if visual_score is None:
+                # Preserve the original, benchmarked text/location/time formula
+                # when either report has no visual evidence.
+                hybrid_score = (0.50 * semantic_score) + (0.35 * location_score) + (0.15 * time_score)
+            else:
+                hybrid_score = (
+                    (0.38 * semantic_score)
+                    + (0.27 * location_score)
+                    + (0.12 * time_score)
+                    + (0.23 * visual_score)
+                )
+
+            strong_visual_context = bool(
+                visual_score is not None
+                and visual_score >= settings.VISUAL_DUPLICATE_THRESHOLD
+                and (
+                    existing.extraction.issue_type == new_extraction.issue_type
+                    or location_score >= 0.6
+                )
+            )
+            is_match = hybrid_score >= settings.HYBRID_DUPLICATE_THRESHOLD or strong_visual_context
             if is_match:
                 is_held_as_duplicate = True
                 
@@ -84,6 +107,8 @@ class DuplicateDetectionService:
                 f"Matched category ({existing.extraction.issue_type.value}) and block ({existing.extraction.building_block}). "
                 f"Semantic similarity {semantic_score:.2f}, location match {location_score:.2f}."
             )
+            if visual_score is not None:
+                reason += f" OpenCV perceptual-hash similarity {visual_score:.2f}."
             
             if is_match or hybrid_score > 0.45:
                 candidates.append(DuplicateEvidence(
@@ -95,9 +120,24 @@ class DuplicateDetectionService:
                     time_window_score=round(time_score, 3),
                     overall_hybrid_score=round(hybrid_score, 3),
                     is_duplicate_candidate=is_match,
-                    reason=reason
+                    reason=reason,
+                    visual_similarity=visual_score,
                 ))
                 
         # Sort candidates descending by hybrid score
         candidates.sort(key=lambda x: x.overall_hybrid_score, reverse=True)
         return candidates, is_held_as_duplicate
+
+    @staticmethod
+    def _visual_similarity(new_images: List[ProblemImage], existing_images: List[ProblemImage]) -> Optional[float]:
+        # Extremely blurry images are useful evidence for people, but unreliable
+        # fingerprints. Exclude them from automatic visual scoring.
+        usable_new_images = [image for image in new_images if not image.quality_warning]
+        usable_existing_images = [image for image in existing_images if not image.quality_warning]
+        if not usable_new_images or not usable_existing_images:
+            return None
+        return max(
+            ImageProcessingService.hash_similarity(new_image.perceptual_hash, existing_image.perceptual_hash)
+            for new_image in usable_new_images
+            for existing_image in usable_existing_images
+        )

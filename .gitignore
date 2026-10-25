@@ -1,0 +1,22 @@
+# Environments and secrets
+.env
+*.env
+backend/.env
+frontend/.env
+*.local
+!*.enc
+!*.encrypted
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+venv/
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+node_modules/
+frontend/dist/
+dist/

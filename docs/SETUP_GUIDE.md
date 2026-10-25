@@ -62,7 +62,28 @@ pip install -r requirements.txt
 ```powershell
 Copy-Item .env.example .env
 ```
-*(Optional: Provide a `GEMMA_API_KEY` for live Google Gemini/Gemma models; if left empty, the intelligent local structured extractor runs seamlessly).*
+*(Optional: Provide a `GEMMA_API_KEY` for live Google Gemini/Gemma models; if left empty, the intelligent local structured extractor runs seamlessly.)*
+
+### Image evidence configuration
+
+Populate these backend-only variables in `.env` to enable image reports:
+
+```env
+CLOUDINARY_CLOUD_NAME="your-cloud-name"
+CLOUDINARY_API_KEY="your-api-key"
+CLOUDINARY_API_SECRET="your-api-secret"
+```
+
+Text-only reports remain available without Cloudinary. Image reports return a clear configuration error until all values are present. Never add Cloudinary secrets to `VITE_` variables or frontend files.
+
+### Optional Notion documentation sync
+
+1. Create an internal integration in Notion and set `NOTION_API_KEY`.
+2. Share the target parent page or database with the integration.
+3. Set `NOTION_PARENT_PAGE_ID` (recommended), `NOTION_DATABASE_ID`, or an existing `NOTION_DOCUMENTATION_PAGE_ID`.
+4. In non-demo environments, set `ADMIN_API_TOKEN` and include it in `X-Admin-Token` when calling the sync endpoint.
+
+Missing Notion credentials/permissions result in an error response; the app does not report a false successful synchronization.
 
 5. Run test suite to verify installation:
 ```powershell
@@ -117,3 +138,13 @@ npm run dev -- --port 3000 --host 127.0.0.1
 5. **n8n Workflow Graph**: Navigate to **"n8n Workflow"** &rarr; View the visual execution topology and live execution runs table with idempotency keys.
 6. **Empirical Benchmarks**: Navigate to **"Benchmark & USP"** &rarr; Inspect the ablation study table and category confusion matrix.
 7. **One-Click Demo Reset**: Click the floating **"Reset Demo"** button anytime to reset tickets to pristine state.
+
+---
+
+## 6. Image Workflow Verification
+
+1. Start the backend with Cloudinary variables configured, then open the Student & Staff Portal.
+2. Drag a JPG, PNG, or WEBP image onto **Photo evidence**, confirm its preview, and submit.
+3. In **Admin Maintenance Triage**, confirm the thumbnail, priority badge, corroborating count, and (when applicable) visual duplicate signal.
+4. Try a text file renamed `.jpg`, an unsupported format, and an oversized file. Each must be rejected by the server.
+5. Submit a same-category/location report with similar evidence. It should enter human review; it must never automatically merge.

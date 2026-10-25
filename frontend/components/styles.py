@@ -1,0 +1,240 @@
+"""Modern dark-theme SaaS styles with blue/purple accents for ResolveAI."""
+
+import streamlit as st
+
+
+def apply_custom_css():
+    st.markdown(
+        """
+        <style>
+        /* Global Background and Typography */
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+        html, body, [class*="css"] {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        code, pre {
+            font-family: 'JetBrains Mono', monospace !important;
+        }
+
+        /* App Background */
+        .stApp {
+            background: radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
+                        radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 45%),
+                        #0b0f19;
+            color: #f1f5f9;
+        }
+
+        /* Top Header Container */
+        .brand-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.2rem 1.8rem;
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .brand-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .brand-subtitle {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        /* Modern Portal Cards */
+        .portal-card {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 16px;
+            padding: 1.8rem;
+            height: 100%;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .portal-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(139, 92, 246, 0.5);
+            box-shadow: 0 12px 30px -10px rgba(99, 102, 241, 0.3);
+        }
+
+        .portal-card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .portal-icon {
+            font-size: 2rem;
+            padding: 0.6rem;
+            background: rgba(99, 102, 241, 0.15);
+            border-radius: 12px;
+            display: inline-flex;
+        }
+
+        .portal-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #f8fafc;
+            margin: 0;
+        }
+
+        .portal-desc {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            line-height: 1.5;
+            min-height: 48px;
+            margin-bottom: 1.2rem;
+        }
+
+        .portal-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            margin-bottom: 0.8rem;
+        }
+
+        .badge-public {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-protected {
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .badge-restricted {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        /* Metric Highlights */
+        .metric-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 1.2rem;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .metric-value {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0.2rem 0;
+        }
+
+        .metric-label {
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        /* Status Pills */
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+        }
+        .status-assigned { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+        .status-held { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+        .status-resolved { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .status-rejected { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+        .status-inprogress { background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.4); }
+
+        /* Priority Pills */
+        .priority-critical { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); font-weight: 700; }
+        .priority-high { background: rgba(249, 115, 22, 0.25); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.5); }
+        .priority-medium { background: rgba(59, 130, 246, 0.25); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.5); }
+        .priority-low { background: rgba(16, 185, 129, 0.25); color: #86efac; border: 1px solid rgba(16, 185, 129, 0.5); }
+
+        /* Timeline and History */
+        .timeline-item {
+            position: relative;
+            padding-left: 1.6rem;
+            padding-bottom: 1.2rem;
+            border-left: 2px solid rgba(99, 102, 241, 0.3);
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 2px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #818cf8;
+            box-shadow: 0 0 10px #6366f1;
+        }
+
+        /* Buttons Styling */
+        div.stButton > button:first-child {
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        div.stButton > button:first-child:hover {
+            border-color: #6366f1;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* Streamlit Tabs */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            margin-bottom: 1.5rem;
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            padding: 8px 16px;
+            border-radius: 8px 8px 0 0;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .stTabs [aria-selected="true"] {
+            color: #ffffff !important;
+            border-bottom-color: #6366f1 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )

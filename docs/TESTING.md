@@ -37,6 +37,7 @@
 
 - **Physical Live Hardware Dispatch**: Testing physical campus maintenance staff radios/SMS dispatches (simulated cleanly via HTTP webhooks and audit logs).
 - **Long-term PostgreSQL cluster migration**: Evaluated with in-memory persistence and local schema models suitable for local hackathon demo.
+- **Live Cloudinary and Notion calls**: These require owner-supplied credentials and a permissioned external workspace. The application intentionally does not fake either service.
 
 ---
 
@@ -44,3 +45,22 @@
 
 1. **Google Gemma API Key**: If no `GEMMA_API_KEY` is provided in `.env`, the system transparently utilizes the built-in deterministic campus NLP parser, achieving 94.2% macro-F1 on benchmark data without crashing.
 2. **External n8n Instance**: If no live n8n webhook URL is configured, ResolveAI executes the complete state machine internally, generating unique idempotency tokens, execution IDs, and branching audit logs.
+
+---
+
+## 4. Image-Evidence Coverage
+
+The backend test module now covers invalid image-byte rejection, OpenCV JPEG decoding and dHash creation, plus a multipart complaint submission using a Cloudinary adapter test double. The test double proves the API wiring without embedding or requiring a cloud secret.
+
+```powershell
+cd backend
+python -m pytest tests -q
+```
+
+Manual verification once external configuration is supplied:
+
+1. Upload one then multiple JPG/PNG/WEBP files; check the Cloudinary `campus-problems/{case_id}/` objects and dashboard thumbnails.
+2. Upload oversized, corrupt, unsupported, and visibly blurry files; confirm error/warning behavior and that no local copies are retained.
+3. Report a same-category/location issue with exact or near-duplicate evidence; confirm visual similarity appears with text/location/time signals and that the case waits for review.
+4. Report an exposed wire, spark, fire, or flood once; confirm it remains critical despite a count of one.
+5. Temporarily use an invalid Cloudinary key or unshared Notion page; confirm `503` and no false-success state.

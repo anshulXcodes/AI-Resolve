@@ -1,7 +1,9 @@
 import uuid
 import datetime
+from threading import RLock
 from typing import List, Optional, Dict
 from app.models.schemas import CaseRecord, CaseStatus, GemmaExtractionResult, IssueCategory, UrgencyLevel, DispatchEvent
+from app.services.priority_service import PriorityService
 
 class InMemoryDatabase:
     """
@@ -12,6 +14,7 @@ class InMemoryDatabase:
     """
     def __init__(self):
         self.cases: Dict[str, CaseRecord] = {}
+        self._lock = RLock()
         self._seed_initial_cases()
         
     def _seed_initial_cases(self):
@@ -56,6 +59,7 @@ class InMemoryDatabase:
                 details={"branch": "Branch_CategoryRouting", "rule": "Rule_WATER_LEAK_DIRECT"}
             )
         )
+        PriorityService.apply(c1)
         self.cases[c1.id] = c1
         
         # Case 2: Electrical in Library
@@ -99,6 +103,7 @@ class InMemoryDatabase:
                 details={"branch": "Branch_CategoryRouting", "rule": "Rule_ELECTRICAL_DIRECT"}
             )
         )
+        PriorityService.apply(c2)
         self.cases[c2.id] = c2
 
         # Case 3: Broken Desk in Block A
@@ -130,18 +135,54 @@ class InMemoryDatabase:
                 {"timestamp": (datetime.datetime.now() - datetime.timedelta(hours=20)).isoformat(), "event": "Repaired and verified by carpentry supervisor"}
             ]
         )
+        PriorityService.apply(c3)
         self.cases[c3.id] = c3
 
     def get_all(self) -> List[CaseRecord]:
-        return sorted(list(self.cases.values()), key=lambda x: x.created_at, reverse=True)
+        with self._lock:
+            return sorted(
+                list(self.cases.values()),
+                key=lambda x: (x.priority_score, x.corroborating_report_count, x.created_at),
+                reverse=True,
+            )
         
     def get_by_id(self, case_id: str) -> Optional[CaseRecord]:
-        return self.cases.get(case_id)
+        with self._lock:
+            return self.cases.get(case_id)
         
     def add(self, case: CaseRecord):
-        self.cases[case.id] = case
+        with self._lock:
+            self.cases[case.id] = case
         
     def update(self, case: CaseRecord):
-        self.cases[case.id] = case
+        with self._lock:
+            self.cases[case.id] = case
+
+    def refresh_corroboration(self, parent_case_id: str) -> Optional[CaseRecord]:
+        """Recompute a cluster count from auditable child records, not a blind increment."""
+        with self._lock:
+            parent = self.cases.get(parent_case_id)
+            if not parent:
+                return None
+            related_reports = [
+                case for case in self.cases.values()
+                if case.id != parent_case_id and (
+                    case.parent_case_id == parent_case_id
+                    or (
+                        case.suspected_parent_case_id == parent_case_id
+                        and case.review_status.value == "pending_human_review"
+                    )
+                )
+            ]
+            parent.corroborating_report_count = 1 + len(related_reports)
+            PriorityService.apply(parent)
+            parent.last_updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            self.cases[parent.id] = parent
+            return parent
+
+    def reset(self) -> None:
+        with self._lock:
+            self.cases = {}
+            self._seed_initial_cases()
 
 db = InMemoryDatabase()
